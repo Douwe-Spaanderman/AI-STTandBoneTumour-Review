@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI in Radiological Imaging of STBT</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.datatables.net/2.2.2/css/dataTables.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         html, body {
             margin: 0;
@@ -66,14 +68,79 @@
         }
 
         .container-fluid {
-            height: 100%;
+            height: 100vh;
             display: flex;
             flex-direction: column;
         }
+
         #plotly-frame {
             flex: 1;
             width: 100%;
-            height: 100%;
+            overflow: hidden;
+        }
+
+        .full-title {
+            padding: 10px;
+            margin: 5px 0;
+        }
+        .shown {
+            background-color: #f0f0f0; /* Optional: Highlight the expanded row */
+        }
+
+        /* Style for the expand/collapse icon */
+        td .expand-icon {
+            cursor: pointer;
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            text-align: center;
+            line-height: 16px;
+            margin-right: 5px;
+        }
+
+        /* Style for the expanded row */
+        tr.shown td {
+            background-color: #f9f9f9; /* Highlight the expanded row */
+        }
+
+        td.no-click {
+            cursor: default; /* Disable pointer cursor */
+            color: #999; /* Gray out the text */
+        }
+
+        td:first-child {
+            pointer-events: none; /* Disable all click events */
+        }
+
+        td:first-child .expand-icon {
+            pointer-events: auto; /* Re-enable click events for the icon */
+        }
+
+        .dataTables_wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .dataTables_scrollBody {
+            flex: 1;
+            overflow: auto;
+        }
+
+        .dataTables_paginate {
+            margin-top: 10px;
+        }
+        .dataTables_paginate .paginate_button {
+            padding: 5px 10px;
+            margin: 0 2px;
+            border: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .dataTables_paginate .paginate_button.current {
+            background: #007bff;
+            color: #fff;
+            border-color: #007bff;
         }
     </style>
 </head>
@@ -152,6 +219,7 @@
 
     <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.2.1/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/2.2.2/js/dataTables.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', (event) => {
             document.getElementById('Home').addEventListener('click', function() {
@@ -263,7 +331,7 @@
 
             // Create the complete div for table-container
             var newDiv = document.createElement('div');
-            newDiv.className = 'container-fluid overflow-auto';
+            newDiv.className = 'container-fluid';
             newDiv.id = 'dataframe-container';
 
             var newTable = document.createElement('div');
@@ -284,7 +352,23 @@
                 },
                 datatables_options: {
                     paging: false,
-                    responsive: true
+                    responsive: true,
+                    scrollCollapse: true,
+                    scrollY: '60vh',
+                    scrollX: true,
+                    order: [[1, 'asc']],
+                    columnDefs: [
+                        {
+                            target: 2,
+                            visible: false
+                        },
+                        {
+                            target: 0,
+                            orderable: false,
+                            searchable: false, 
+                            className: 'no-click'
+                        }
+                    ]
                 },
             });
         }
@@ -319,6 +403,7 @@
                         var $tableHead = $("<thead></thead>");
                         var csvHeaderRow = csvData[0];
                         var $tableHeadRow = $("<tr></tr>");
+                        $tableHeadRow.append($("<th></th>")); // Add empty header for the icon column
                         for (var headerIdx = 0; headerIdx < csvHeaderRow.length; headerIdx++) {
                             $tableHeadRow.append($("<th></th>").text(csvHeaderRow[headerIdx]));
                         }
@@ -329,6 +414,7 @@
 
                         for (var rowIdx = 1; rowIdx < csvData.length; rowIdx++) {
                             var $tableBodyRow = $("<tr></tr>");
+                            $tableBodyRow.append($("<td></td>").html('<i class="fas fa-plus-circle expand-icon"></i>'));
                             for (var colIdx = 0; colIdx < csvData[rowIdx].length; colIdx++) {
                                 var $tableBodyRowTd = $("<td></td>");
                                 var cellTemplateFunc = customTemplates[colIdx];
@@ -343,7 +429,31 @@
                         }
                         $table.append($tableBody);
 
-                        $table.DataTable(datatables_options);
+                        // Initialize DataTable
+                        var table = $table.DataTable(datatables_options);
+
+                        // Add click event to the first column
+                        $table.on('click', 'td .expand-icon', function () {
+                            var tr = $(this).closest('tr');
+                            var row = table.row(tr);
+
+                            if (row.child.isShown()) {
+                                // If the row is already open, close it
+                                row.child.hide();
+                                tr.removeClass('shown');
+                                $(this).removeClass('fa-minus-circle').addClass('fa-plus-circle'); // Change icon to "+"
+                            } else {
+                                // If the row is closed, open it and display the full title
+                                row.child(formatFullTitle(row.data())).show();
+                                tr.addClass('shown');
+                                $(this).removeClass('fa-plus-circle').addClass('fa-minus-circle'); // Change icon to "-"
+                            }
+                        });
+
+                        // Function to format the full title (second column) for the child row
+                        function formatFullTitle(rowData) {
+                            return '<div class="full-title">' + rowData[2] + '</div>'; // Assuming the full title is in the second column
+                        }
 
                         if (allow_download) {
                             $containerElement.append("<p><a class='btn btn-info' href='" + csv_path + "'><i class='glyphicon glyphicon-download'></i> Download as CSV</a></p>");
